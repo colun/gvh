@@ -53,6 +53,7 @@ tls.crt と tls.key を同じフォルダに置く必要があります。
 オレオレ証明書（ですらないかもしれないもの）は、たとえば以下のように発行できます。
 
 > openssl genrsa -out tls.key 2048
+
 > openssl req -new -x509 -sha256 -key tls.key -subj "/C=JP/ST=Fukuoka/O=GVH" -out tls.crt -days 3650
 
 証明書が用意できたら、
