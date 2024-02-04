@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"crypto/tls"
 	_ "embed"
 	"encoding/base64"
 	"flag"
@@ -18,6 +19,8 @@ import (
 )
 
 var verbose = flag.Bool("verbose", false, "verbose")
+var public_listen = flag.Bool("public", false, "public listen")
+var https_listen = flag.Bool("https", false, "https listen")
 
 type MyChannel struct {
 	mu  *sync.Mutex
@@ -202,13 +205,23 @@ func listen(port int) {
 	if *verbose {
 		log.Printf("Listening on port %d", port)
 	}
-	fmt.Fprintf(os.Stderr, "http://localhost:%d/\n", port)
-	if err := http.ListenAndServe(fmt.Sprintf("127.0.0.1:%d", port), nil); err != nil {
-		log.Panicln("ListenAndServe Error:", err)
+	var addr string
+	if *public_listen {
+		addr = fmt.Sprintf("127.0.0.1:%d", port)
+	} else {
+		addr = fmt.Sprintf(":%d", port)
 	}
-	//if err := http.ListenAndServeTLS(fmt.Sprintf("127.0.0.1:%d", port), "tls.crt", "tls.key", nil); err != nil {
-	//	log.Panicln("ListenAndServe Error:", err)
-	//}
+	if *https_listen {
+		fmt.Fprintf(os.Stderr, "https://localhost:%d/\n", port)
+		if err := http.ListenAndServeTLS(fmt.Sprintf("127.0.0.1:%d", port), "tls.crt", "tls.key", nil); err != nil {
+			log.Panicln("ListenAndServe Error:", err)
+		}
+	} else {
+		fmt.Fprintf(os.Stderr, "http://localhost:%d/\n", port)
+		if err := http.ListenAndServe(addr, nil); err != nil {
+			log.Panicln("ListenAndServe Error:", err)
+		}
+	}
 }
 
 //go:embed assets/vis.html
@@ -323,8 +336,9 @@ func serve(port int) {
 
 func main() {
 	var (
-		port    = flag.Int("port", 8080, "http server port")
-		connect = flag.String("connect", "", "connect ws or wss url")
+		port       = flag.Int("port", 8080, "http server port")
+		connect    = flag.String("connect", "", "connect ws or wss url")
+		ignore_tls = flag.Bool("ignore-tls", false, "ignore tls")
 	)
 	flag.Parse()
 	if *connect != "" {
@@ -337,7 +351,11 @@ func main() {
 				h.Add("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(user_password_[0]+":"+user_password_[0])))
 			}
 		}
-		conn, _, err := websocket.DefaultDialer.Dial(*connect, h)
+		dialer := *websocket.DefaultDialer
+		if *ignore_tls {
+			dialer.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+		}
+		conn, _, err := dialer.Dial(*connect, h)
 		if err != nil {
 			fmt.Printf("Can not connect ... %s\n", *connect)
 			return
