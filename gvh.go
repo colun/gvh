@@ -213,7 +213,7 @@ func listen(port int) {
 	}
 	if *https_listen {
 		fmt.Fprintf(os.Stderr, "https://localhost:%d/\n", port)
-		if err := http.ListenAndServeTLS(fmt.Sprintf("127.0.0.1:%d", port), "tls.crt", "tls.key", nil); err != nil {
+		if err := http.ListenAndServeTLS(addr, "tls.crt", "tls.key", nil); err != nil {
 			log.Panicln("ListenAndServe Error:", err)
 		}
 	} else {
