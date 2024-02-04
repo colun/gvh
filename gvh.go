@@ -207,9 +207,9 @@ func listen(port int) {
 	}
 	var addr string
 	if *public_listen {
-		addr = fmt.Sprintf("127.0.0.1:%d", port)
-	} else {
 		addr = fmt.Sprintf(":%d", port)
+	} else {
+		addr = fmt.Sprintf("127.0.0.1:%d", port)
 	}
 	if *https_listen {
 		fmt.Fprintf(os.Stderr, "https://localhost:%d/\n", port)
