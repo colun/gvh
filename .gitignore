@@ -19,3 +19,7 @@
 
 # Go workspace file
 go.work
+
+# Specific to this repository
+*.crt
+*.key
