@@ -69,7 +69,13 @@ func worker(mch *MyChannel, ch_name string) {
 				mch.ins = []*websocket.Conn{}
 			}
 			mch.mu.Unlock()
-		} else if ty == "flush" || ty == "f" {
+		} else if ty == "flush" || ty == "f" || ty == "i" {
+			if ty == "i" {
+				if !input_mode {
+					input_mode = true
+					short_snaps = append(short_snaps, "i")
+				}
+			}
 			if 1 <= len(conns) && 1 <= len(short_snaps) {
 				message := strings.Join(short_snaps, "\n") + "\n"
 				for _, conn := range conns {
@@ -105,11 +111,6 @@ func worker(mch *MyChannel, ch_name string) {
 		} else if ty == "ra" {
 			long_snaps = []string{}
 			short_snaps = []string{"ra"}
-		} else if ty == "i" {
-			if !input_mode {
-				input_mode = true
-				short_snaps = append(short_snaps, "i")
-			}
 		} else if ty == "k" {
 			mch.mu.Lock()
 			if 1 <= len(mch.inp) {
@@ -357,7 +358,7 @@ func main() {
 		}
 		conn, _, err := dialer.Dial(*connect, h)
 		if err != nil {
-			fmt.Printf("Can not connect ... %s\n", *connect)
+			fmt.Printf("Can not connect ... %s %s\n", *connect, err)
 			return
 		}
 		sc := bufio.NewScanner(os.Stdin)
@@ -369,10 +370,22 @@ func main() {
 				log.Printf("%s: %s", "", line)
 			}
 			tokens := strings.Split(line, " ")
-			if tokens[0] == "f" {
-				message := strings.Join(snaps, "\n") + "\n"
-				MyWriteMessage(conn, message)
-				snaps = []string{}
+			if tokens[0] == "f" || tokens[0] == "i" {
+				if tokens[0] == "i" {
+					snaps = append(snaps, line)
+				}
+				if 1 <= len(snaps) {
+					message := strings.Join(snaps, "\n") + "\n"
+					MyWriteMessage(conn, message)
+					snaps = []string{}
+				}
+				if tokens[0] == "i" {
+					_, message, err := conn.ReadMessage()
+					if err != nil {
+						break
+					}
+					fmt.Printf(string(message))
+				}
 			} else {
 				snaps = append(snaps, line)
 			}
