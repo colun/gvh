@@ -51,6 +51,13 @@ func worker(mch *MyChannel, ch_name string) {
 		tokens := strings.Split(line, " ")
 		ty := tokens[0]
 		if ty == "register" {
+			if 1 <= len(conns) && 1 <= len(short_snaps) {
+				message := strings.Join(short_snaps, "\n") + "\n"
+				for _, conn := range conns {
+					MyWriteMessage(conn, message)
+				}
+			}
+			short_snaps = []string{}
 			mch.mu.Lock()
 			if 1 <= len(mch.ins) {
 				var message string
@@ -319,8 +326,7 @@ func serve(port int) {
 	go listen(port)
 	mch := getChannel("")
 	sc := bufio.NewScanner(os.Stdin)
-	for {
-		sc.Scan()
+	for sc.Scan() {
 		line := sc.Text()
 		if *verbose {
 			log.Printf("%s: %s", "", line)
