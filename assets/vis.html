@@ -1,6 +1,7 @@
 <html>
     <head>
         <meta charset="UTF-8">
+        <meta name="google" content="notranslate">
         <title>GV</title>
         <script>
 "use strict";
@@ -30,8 +31,15 @@ var ARGBrev = function(color) {
 var root5 = Math.sqrt(5);
 var root1_5 = 1 / root5;
 window.addEventListener("load", function() {
+    if(window.location.pathname!="/") {
+        document.title = decodeURIComponent(window.location.pathname.substring(1));
+    }
     var screen = document.getElementsByClassName("screen")[0];
     var consoleEle = document.getElementsByClassName("console")[0];
+    var pagesEle = document.getElementsByClassName("pages")[0];
+    var snapNameEle = document.getElementsByClassName("snap_name")[0];
+    var nowSnapEle = document.getElementsByClassName("now_snap")[0];
+    var totalSnapEle = document.getElementsByClassName("total_snap")[0];
     var svg = createSvgElement("svg");
     svg.setAttribute("width", "100%");
     svg.setAttribute("height", "100%");
@@ -65,6 +73,8 @@ window.addEventListener("load", function() {
             maxX: -Number.MAX_VALUE,
             minY: Number.MAX_VALUE,
             maxY: -Number.MAX_VALUE,
+            nowTime: null,
+            nextTime: 0,
             _: 0
         };
     };
@@ -74,6 +84,8 @@ window.addEventListener("load", function() {
             maxX: state.maxX,
             minY: state.minY,
             maxY: state.maxY,
+            nowTime: state.nowTime,
+            nextTime: state.nextTime,
             _: 0
         };
     };
@@ -210,7 +222,7 @@ window.addEventListener("load", function() {
         e.preventDefault();
     }, { passive: false });
     var savedState = copyState(state);
-    var buildSnapItem = function(line, tokens, type, beforeLine) {
+    var buildSnapItem = function(line, tokens, type, beforeLine, isDraw) {
         if(type=="c") {
             console.assert(3<=tokens.length);
             var cx = parseFloat(tokens[1]);
@@ -218,7 +230,7 @@ window.addEventListener("load", function() {
             var argb = ARGB(4<=tokens.length ? tokens[3] : "0");
             var r = 5<=tokens.length ? parseFloat(tokens[4]) : 0.5;
             console.assert(0<=r);
-            if(0<argb[0]) {
+            if(isDraw && 0<argb[0]) {
                 var ele = createSvgElement("circle");
                 ele.setAttribute("cx", cx);
                 ele.setAttribute("cy", cy);
@@ -236,7 +248,7 @@ window.addEventListener("load", function() {
             console.assert(tokens.length%2==0);
             var argb = ARGB(2<=tokens.length ? tokens[1] : "0");
             var ei = tokens.length/2 - 1;
-            if(0<argb[0] && 1<=ei) {
+            if(isDraw && 0<argb[0] && 1<=ei) {
                 var points = [];
                 for(var i=0; i<ei; ++i) {
                     points.push(tokens[i+i+2] + "," + tokens[i+i+3]);
@@ -263,7 +275,7 @@ window.addEventListener("load", function() {
             var y2 = parseFloat(tokens[4]);
             var argb = ARGB(6<=tokens.length ? tokens[5] : "0");
             var r = 7<=tokens.length ? parseFloat(tokens[6]) : 0.05;
-            if(0<argb[0]) {
+            if(isDraw && 0<argb[0]) {
                 var ele = createSvgElement("line");
                 ele.setAttribute("x1", x1);
                 ele.setAttribute("y1", y1);
@@ -300,7 +312,7 @@ window.addEventListener("load", function() {
             var y3 = y2 + rxr + (ryr+ryr);
             var x4 = x2 + (rxr+rxr) + ryr;
             var y4 = y2 - rxr + (ryr+ryr);
-            if(0<argb[0]) {
+            if(isDraw && 0<argb[0]) {
                 var ele = createSvgElement("polygon");
                 ele.setAttribute("points", [x1, ",", y1, " ", x2, ",", y2, " ", x3, ",", y3, " ", x2, ",", y2, " ", x4, ",", y4, " ", x2, ",", y2, " "].join(""));
                 ele.setAttribute("stroke", argb[1]);
@@ -323,7 +335,7 @@ window.addEventListener("load", function() {
             var argb = ARGBrev(4<=tokens.length ? tokens[3] : "0");
             var r = 5<=tokens.length ? parseFloat(tokens[4]) : 0.5;
             var text = tokens.slice(5).join(" ");
-            if(0<argb[0]) {
+            if(isDraw && 0<argb[0]) {
                 var ele = createSvgElement("text");
                 ele.setAttribute("x", cx);
                 ele.setAttribute("y", cy + r * 0.73);
@@ -352,7 +364,7 @@ window.addEventListener("load", function() {
             var argb = ARGBrev(4<=tokens.length ? tokens[3] : "0");
             var r = 5<=tokens.length ? parseFloat(tokens[4]) : 0.5;
             var text = tokens.slice(5).join(" ");
-            if(0<argb[0]) {
+            if(isDraw && 0<argb[0]) {
                 var ele = createSvgElement("text");
                 ele.setAttribute("x", cx);
                 ele.setAttribute("y", cy + r * 0.73);
@@ -381,7 +393,7 @@ window.addEventListener("load", function() {
             var argb = ARGBrev(4<=tokens.length ? tokens[3] : "0");
             var r = 5<=tokens.length ? parseFloat(tokens[4]) : 0.5;
             var text = tokens.slice(5).join(" ");
-            if(0<argb[0]) {
+            if(isDraw && 0<argb[0]) {
                 var ele = createSvgElement("text");
                 ele.setAttribute("x", cx);
                 ele.setAttribute("y", cy + r * 0.73);
@@ -407,11 +419,16 @@ window.addEventListener("load", function() {
             console.assert(TODO);
         }
         else if(type=="o") {
-            var text = tokens.slice(1).join(" ");
-            outputs.push(text);
-            reserveUpdateOutputs();
+            if(isDraw) {
+                var text = tokens.slice(1).join(" ");
+                outputs.push(text);
+                reserveUpdateOutputs();
+            }
         }
         else if(type=="il") {
+            if(!isDraw) {
+                return;
+            }
             var tokens2 = beforeLine.split(" ");
             var link = line.substring(3);
             var type2 = tokens2[0];
@@ -734,6 +751,7 @@ window.addEventListener("load", function() {
 
     }
     var nowSnap = null;
+    var screenTime = null;
     var initSnaps = function() {
         initScreen();
         snapMap = {};
@@ -742,12 +760,91 @@ window.addEventListener("load", function() {
         state = newState();
         savedState = copyState(state);
     };
+    var allowedKeys = {};
+    var updateControl = function() {
+        var keys = Object.keys(snapMap);
+        if(2<=keys.length) {
+            pagesEle.style.display = null;
+            if(screenTime.startsWith("_")) {
+                snapNameEle.textContent = "[ " + screenTime.substring(1) + " ]";
+            }
+            else {
+                snapNameEle.textContent = "";
+            }
+            nowSnapEle.innerHTML = "&nbsp;&nbsp;&nbsp;" + (keys.indexOf(screenTime)+1);
+            totalSnapEle.innerHTML = "&nbsp;&nbsp;&nbsp;" + Object.keys(snapMap).length;
+        }
+        else {
+            pagesEle.style.display = "none";
+        }
+    }
+    var changeSnap = function(t) {
+        var snap = snapMap[t];
+        console.assert(snap!==undefined);
+        screenTime = t;
+        initScreen();
+        var snap = snapMap[screenTime];
+        for(var i=0; i<snap.length; ++i) {
+            var line2 = snap[i];
+            var tokens2 = line2.split(" ");
+            buildSnapItem(line2, tokens2, tokens2[0], i==0 ? null : snap[i-1], true);
+        }
+        updateControl();
+    };
+    nowSnapEle.addEventListener("click", function(e) {
+        var keys = Object.keys(snapMap);
+        var ret = window.prompt("page number:", keys.indexOf(screenTime)+1);
+        if(ret!==null) {
+            var page_no = parseInt(ret);
+            if(1<=page_no && page_no<=keys.length) {
+                changeSnap(keys[page_no-1]);
+            }
+        }
+    });
+    var newTime = function(timeName) {
+        savedState = copyState(state);
+        if(timeName!=null) {
+            state.nowTime = "_" + timeName;
+        }
+        else {
+            state.nowTime = "#" + state.nextTime;
+            ++state.nextTime;
+        }
+        nowSnap = snapMap[state.nowTime];
+        if(nowSnap===undefined) {
+            nowSnap = snapMap[state.nowTime] = [];
+            savedState.newTimeLength = null;
+        }
+        else {
+            savedState.newTimeLength = nowSnap.length;
+        }
+        savedState.newTime = state.nowTime;
+        if(screenTime===null) {
+            changeSnap(state.nowTime);
+        }
+    }
     var addLine = function(line) {
         var tokens = line.split(" ");
         console.assert(1<=tokens.length);
         var type = tokens[0];
         if(type=="r") {
             console.assert(TODO);
+            if(savedState.newTimeLength===null) {
+                delete snapMap[savedState.newTime];
+                if(screenTime==savedState.newTime) {
+                    initScreen();
+                }
+            }
+            else {
+                snapMap[savedState.newTime] = snapMap[savedState.newTime].slice(0, savedState.newTimeLength);
+                if(screenTime==savedState.newTime) {
+                    changeSnap(screenTime);
+                }
+            }
+            state = copyState(savedState);
+            nowSnap = snapMap[state.nowTime];
+            savedState.newTimeLength = nowSnap.length;
+            savedState.newTime = state.nowTime;
         }
         else if(type=="ra") {
             initSnaps();
@@ -762,49 +859,84 @@ window.addEventListener("load", function() {
             console.assert(TODO);
         }
         else if(type=="ik") {
-            console.assert(TODO);
+            console.assert(2<=tokens.length);
+            var kg = tokens[1];
+            if(kg=="clear") {
+                allowedKeys = {};
+            }
+            else if(kg=="alphabet") {
+                var keys = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+                for(var i=0; i<keys.length; ++i) {
+                    allowedKeys[keys[i]] = keys[i];
+                }
+            }
+            else if(kg=="number") {
+                var keys = "0123456789";
+                for(var i=0; i<keys.length; ++i) {
+                    allowedKeys[keys[i]] = keys[i];
+                }
+            }
+            else if(kg=="space") {
+                allowedKeys["Space"] = " ";
+            }
+            else if(kg=="graphic") {
+                var keys = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+                for(var i=0; i<keys.length; ++i) {
+                    allowedKeys[keys[i]] = keys[i];
+                }
+                allowedKeys["Space"] = " ";
+            }
+            else if(kg=="cursor") {
+                allowedKeys["ArrowRight"] = "right";
+                allowedKeys["ArrowLeft"] = "left";
+                allowedKeys["ArrowUp"] = "up";
+                allowedKeys["ArrowDown"] = "down";
+            }
+            else if(kg=="enter") {
+                allowedKeys["Enter"] = "enter";
+            }
+            else if(kg=="delete") {
+                allowedKeys["Delete"] = "delete";
+            }
+            else if(kg=="backspace") {
+                allowedKeys["Backspace"] = "backspace";
+            }
+            else if(kg=="escape") {
+                allowedKeys["Escape"] = "escape";
+            }
+            else if(kg=="all") {
+                var keys = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+                for(var i=0; i<keys.length; ++i) {
+                    allowedKeys[keys[i]] = keys[i];
+                }
+                allowedKeys["Space"] = " ";
+                allowedKeys["ArrowRight"] = "right";
+                allowedKeys["ArrowLeft"] = "left";
+                allowedKeys["ArrowUp"] = "up";
+                allowedKeys["ArrowDown"] = "down";
+                allowedKeys["Enter"] = "enter";
+                allowedKeys["Delete"] = "delete";
+                allowedKeys["Backspace"] = "backspace";
+                allowedKeys["Escape"] = "escape";
+            }
+            else {
+                console.assert(TODO);
+            }
         }
         else if(type=="a") {
             console.assert(TODO);
         }
         else if(type=="n") {
-            savedState = copyState(state);
-            if(2<=tokens.length) {
-                state.nowTime = tokens[1];
-                var floatTime = parseFloat(state.nowTime);
-                if(!isNaN(floatTime) && (state.maxTime===undefined || state.maxTime < floatTime)) {
-                    state.maxTime = floatTime;
-                }
-            }
-            else {
-                if(state.maxTime===undefined) {
-                    state.maxTime = 0;
-                }
-                else {
-                    state.maxTime = Math.max(0, state.maxTime + 1);
-                }
-                state.nowTime = state.maxTime.toString();
-            }
-            initScreen();
-            nowSnap = snapMap[state.nowTime];
-            if(nowSnap===undefined) {
-                nowSnap = snapMap[state.nowTime] = [];
-            }
-            else {
-                for(var i=0; i<nowSnap.length; ++i) {
-                    var line2 = nowSnap[i];
-                    var tokens2 = line2.split(" ");
-                    buildSnapItem(line2, tokens2, tokens2[0], i==0 ? null : nowSnap[i-1]);
-                }
-            }
-            savedState.newTime = state.nowTime;
-            savedState.newTimeLength = nowSnap.length;
+            newTime(2<=tokens.length ? tokens[1] : null);
         }
         else if(type=="f") {
             console.assert(TODO);
         }
         else {
-            buildSnapItem(line, tokens, type, nowSnap.length==0 ? null : nowSnap[nowSnap.length-1]);
+            if(nowSnap===null) {
+                newTime(null);
+            }
+            buildSnapItem(line, tokens, type, nowSnap.length==0 ? null : nowSnap[nowSnap.length-1], screenTime==state.nowTime);
             console.assert(nowSnap!=null);
             nowSnap.push(line);
         }
@@ -812,12 +944,12 @@ window.addEventListener("load", function() {
     var ws = null;
     var focusFlag = true;
     var beforeData = "";
-    var wsOpen = function() {
-        beforeData = "";
-        input_mode = false;
-        initSnaps();
+    var updateAll = function() {
         updateZoom();
         updateOutputs();
+        updateControl();
+    }
+    var wsOpen = function() {
         var ws_url = [];
         ws_url.push(window.location.protocol=="https:" ? "wss://" : "ws://");
         ws_url.push(window.location.host);
@@ -825,6 +957,10 @@ window.addEventListener("load", function() {
         ws_url = ws_url.join("");
         ws = new WebSocket(ws_url);
         ws.onopen = function(event) {
+            beforeData = "";
+            input_mode = false;
+            initSnaps();
+            updateAll();
             ws.send("register\n");
         };
         ws.onerror = function(event) {
@@ -836,8 +972,7 @@ window.addEventListener("load", function() {
             for(var i=0; i<lines.length; ++i) {
                 addLine(lines[i]);
             }
-            updateZoom();
-            updateOutputs();
+            updateAll();
         };
         ws.onclose = function(event) {
             var ws2 = ws;
@@ -862,14 +997,60 @@ window.addEventListener("load", function() {
         }
     });
     window.addEventListener("keydown", function(e) {
-        if(e.key=="ArrowRight") {
-            //snapMap
+        if(allowedKeys[e.key]) {
+            if(!input_mode) {
+                return;
+            }
+            input_mode = false;
+            ws.send("k " + allowedKeys[e.key] + "\n");
         }
         else if(e.key=="ArrowLeft") {
-            
+            var keys = Object.keys(snapMap);
+            var idx = Math.max(0, keys.indexOf(screenTime)) - 1;
+            if(idx<0) {
+                idx = 0;
+            }
+            var newScreenTime = keys[idx];
+            if(screenTime!=newScreenTime) {
+                changeSnap(newScreenTime);
+                updateAll();
+            }
         }
-        if(ws) {
-            //ws.send("o down " + e.key + "\n");
+        else if(e.key=="ArrowRight") {
+            var keys = Object.keys(snapMap);
+            var idx = Math.max(0, keys.indexOf(screenTime)) + 1;
+            if(keys.length<=idx) {
+                idx = keys.length - 1;
+            }
+            var newScreenTime = keys[idx];
+            if(screenTime!=newScreenTime) {
+                changeSnap(newScreenTime);
+                updateAll();
+            }
+        }
+        else if(e.key=="ArrowUp") {
+            var keys = Object.keys(snapMap);
+            var idx = Math.max(0, keys.indexOf(screenTime)) - 10;
+            if(idx<0) {
+                idx = 0;
+            }
+            var newScreenTime = keys[idx];
+            if(screenTime!=newScreenTime) {
+                changeSnap(newScreenTime);
+                updateAll();
+            }
+        }
+        else if(e.key=="ArrowDown") {
+            var keys = Object.keys(snapMap);
+            var idx = Math.max(0, keys.indexOf(screenTime)) + 10;
+            if(keys.length<=idx) {
+                idx = keys.length - 1;
+            }
+            var newScreenTime = keys[idx];
+            if(screenTime!=newScreenTime) {
+                changeSnap(newScreenTime);
+                updateAll();
+            }
         }
     });
     window.addEventListener("mousemove", function(e) {
@@ -931,7 +1112,7 @@ window.addEventListener("load", function() {
             if(flag & 2) {
                 ele.setAttribute("fill-opacity", "80%");
             }
-            setInterval(function() {
+            setTimeout(function() {
                 if(flag & 1) {
                     ele.setAttribute("stroke-opacity", "0%");
                 }
@@ -941,13 +1122,85 @@ window.addEventListener("load", function() {
             }, 500);
         }
     });
+    var getGvFile = function() {
+        var lines = [];
+        var keys = Object.keys(snapMap);
+        for(var j=0; j<keys.length; ++j) {
+            var k = keys[j];
+            if(k.startsWith("#")) {
+                lines.push("n");
+            }
+            else {
+                lines.push("n " + k.substring(1));
+            }
+            var snap = snapMap[k];
+            for(var i=0; i<snap.length; ++i) {
+                lines.push(snap[i]);
+            }
+        }
+        lines.push("");
+        return lines.join("\n");
+    };
+    document.getElementsByClassName("copy")[0].addEventListener("click", function(e) {
+        var gv = getGvFile();
+        var alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        var name = "";
+        for(var i=0; i<16; ++i) {
+            name += alphabet[Math.floor(Math.random() * alphabet.length)];
+        }
+        name = window.prompt("destination name:", name);
+        if(name!==null) {
+            var ws_url = [];
+            ws_url.push(window.location.protocol=="https:" ? "wss://" : "ws://");
+            ws_url.push(window.location.host);
+            ws_url.push("/" + name);
+            ws_url = ws_url.join("");
+            var ws = new WebSocket(ws_url);
+            ws.onopen = function(event) {
+                ws.send(gv);
+                window.open("http" + ws_url.substring(2));
+                ws.close();
+            };
+        }
+    });
+    document.getElementsByClassName("download")[0].addEventListener("click", function(e) {
+        var filename = window.prompt("download filename:");
+        if(filename!==null) {
+            var blob = new Blob([getGvFile()], {type: "text/plain"});
+            var url = URL.createObjectURL(blob);
+            var aEle = document.createElement("a");
+            aEle.download = filename + ".gv";
+            aEle.href = url;
+            aEle.click();
+            URL.revokeObjectURL(url);
+        }
+    });
+    document.getElementsByClassName("upload")[0].addEventListener("change", function(e) {
+        var file = e.currentTarget.files[0];
+        if(file) {
+            var f = new FileReader();
+            f.addEventListener("load", function(e2) {
+                e.target.value = "";
+                ws.send(e2.currentTarget.result);
+            });
+            f.readAsText(file);
+        }
+    });
     window.scrollBy({left: 0, top: 10000, behavior: "smooth"});
 });
         </script>
+        <style>
+            .now_snap:hover, .copy:hover, .download:hover, .upload:hover {
+                background-color: yellow;
+                cursor: pointer;
+            }
+        </style>
     </head>
     <body style="margin: 0;">
-        <div class="screen" style="position: fixed; width: 100%; height: 100%; overflow: hidden;">
-            
+        <div class="screen" style="position: fixed; width: 100%; height: 100%; overflow: hidden;"></div>
+        <div style="position: fixed; overflow: hidden; right: 0; bottom: 0;" align="right">
+            <div class="pages" style="display: none;"><span class="snap_name"></span> <span class="now_snap"></span> / <span class="total_snap"></span></div>
+            <div>[<span class="copy">Copy</span>] [<span class="download">Download</span>] [Upload: <input type="file" accept=".gv" class="upload">]</div>
         </div>
         <pre class="console" style="margin: 0; position: absolute; font-size: large; width: 100%; white-space: pre;"></pre>
     </body>
