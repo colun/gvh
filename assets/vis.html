@@ -40,6 +40,7 @@ window.addEventListener("load", function() {
     var snapNameEle = document.getElementsByClassName("snap_name")[0];
     var nowSnapEle = document.getElementsByClassName("now_snap")[0];
     var totalSnapEle = document.getElementsByClassName("total_snap")[0];
+    var drawTimeEle = document.getElementsByClassName("draw_time")[0];
     var svg = createSvgElement("svg");
     svg.setAttribute("width", "100%");
     svg.setAttribute("height", "100%");
@@ -61,6 +62,10 @@ window.addEventListener("load", function() {
     svg.appendChild(background);
     var canvas = createSvgElement("g");
     svg.appendChild(canvas);
+    var drawed = createSvgElement("g");
+    svg.appendChild(drawed);
+    var drawing = createSvgElement("g");
+    svg.appendChild(drawing);
     var foreground = createSvgElement("g");
     svg.appendChild(foreground);
     var links = [];
@@ -100,6 +105,28 @@ window.addEventListener("load", function() {
         }
     };
     updateViewBox();
+    var measureTextWidthRaw = function(text) {
+        measure.textContent = text;
+        return measure.getBBox().width;
+    }
+    var measureCache = {};
+    var measure00 = measureTextWidthRaw("00");
+    var measureSide = measureTextWidthRaw("0") * 2 - measure00;
+    var measureCharWidth = function(ch) {
+        var ret = measureCache[ch];
+        if(ret===undefined) {
+            measureCache[ch] = ret = measureTextWidthRaw("0" + ch + "0") - measure00;
+        }
+        return ret;
+    }
+    var measureTextWidth = function(text) {
+        var ret = measureSide;
+        var L = text.split("");
+        for(var i=0; i<L.length; ++i) {
+            ret += measureCharWidth(L[i]);
+        }
+        return ret;
+    }
     var outputs = [];
     var outputsFlag = false;
     var updateOutputs = function() {
@@ -353,8 +380,7 @@ window.addEventListener("load", function() {
                 ele.textContent = text;
                 canvas.appendChild(ele);
             }
-            measure.textContent = text;
-            var rx = r * measure.getBBox().width;
+            var rx = r * measureTextWidth(text);
             updateXY(cx-rx, cx+rx, cy-r, cy+r);
         }
         else if(type=="tl") {
@@ -382,8 +408,7 @@ window.addEventListener("load", function() {
                 ele.textContent = text;
                 canvas.appendChild(ele);
             }
-            measure.textContent = text;
-            var rx = r * measure.getBBox().width;
+            var rx = r * measureTextWidth(text);
             updateXY(cx, cx+(rx+rx), cy-r, cy+r);
         }
         else if(type=="tr") {
@@ -411,8 +436,7 @@ window.addEventListener("load", function() {
                 ele.textContent = text;
                 canvas.appendChild(ele);
             }
-            measure.textContent = text;
-            var rx = r * measure.getBBox().width;
+            var rx = r * measureTextWidth(text);
             updateXY(cx-(rx+rx), cx, cy-r, cy+r);
         }
         else if(type=="b") {
@@ -656,8 +680,7 @@ window.addEventListener("load", function() {
                 var r = 5<=tokens2.length ? parseFloat(tokens2[4]) : 0.5;
                 var text = tokens2.slice(5).join(" ");
                 var rr = r * r;
-                measure.textContent = text;
-                var rx = measure.getBBox().width * r;
+                var rx = r * measureTextWidth(text);
                 var func = function(x, y) {
                     var dx = x - cx;
                     var dy = y - cy;
@@ -687,8 +710,7 @@ window.addEventListener("load", function() {
                 var r = 5<=tokens2.length ? parseFloat(tokens2[4]) : 0.5;
                 var text = tokens2.slice(5).join(" ");
                 var rr = r * r;
-                measure.textContent = text;
-                var rx2 = measure.getBBox().width * r * 2;
+                var rx2 = r * 2 * measureTextWidth(text);
                 var func = function(x, y) {
                     var dx = x - cx;
                     var dy = y - cy;
@@ -718,8 +740,7 @@ window.addEventListener("load", function() {
                 var r = 5<=tokens2.length ? parseFloat(tokens2[4]) : 0.5;
                 var text = tokens2.slice(5).join(" ");
                 var rr = r * r;
-                measure.textContent = text;
-                var rx2 = measure.getBBox().width * r * 2;
+                var rx2 = r * 2 * measureTextWidth(text);
                 var func = function(x, y) {
                     var dx = x - cx;
                     var dy = y - cy;
@@ -777,6 +798,7 @@ window.addEventListener("load", function() {
         else {
             pagesEle.style.display = "none";
         }
+        drawTimeEle.textContent = endTimestamp - startTimestamp;
     }
     var changeSnap = function(t) {
         var snap = snapMap[t];
@@ -801,6 +823,8 @@ window.addEventListener("load", function() {
             }
         }
     });
+    var startTimestamp = Date.now();
+    var endTimestamp =startTimestamp;
     var newTime = function(timeName) {
         savedState = copyState(state);
         if(timeName!=null) {
@@ -822,6 +846,7 @@ window.addEventListener("load", function() {
         if(screenTime===null) {
             changeSnap(state.nowTime);
         }
+        endTimestamp = startTimestamp = Date.now();
     }
     var addLine = function(line) {
         var tokens = line.split(" ");
@@ -939,6 +964,7 @@ window.addEventListener("load", function() {
             buildSnapItem(line, tokens, type, nowSnap.length==0 ? null : nowSnap[nowSnap.length-1], screenTime==state.nowTime);
             console.assert(nowSnap!=null);
             nowSnap.push(line);
+            endTimestamp = Date.now();
         }
     };
     var ws = null;
@@ -1053,10 +1079,126 @@ window.addEventListener("load", function() {
             }
         }
     });
-    window.addEventListener("mousemove", function(e) {
-        if(!input_mode) {
-            return;
+    var omitPolylineSub = function(data, begin, end, eps) {
+        var max_i = -1;
+        var max_d = 0;
+        var bx = data[begin][0];
+        var by = data[begin][1];
+        var ex = data[end][0];
+        var ey = data[end][1];
+        for(var i=begin+1; i<end; ++i) {
+            var x = data[i][0];
+            var y = data[i][1];
+            var dx1 = x - bx;
+            var dy1 = y - by;
+            var dx2 = x - ex;
+            var dy2 = y - ey;
+            var d = Math.sqrt(dx1*dx1 + dy1*dy1) + Math.sqrt(dx2*dx2 + dy2*dy2);
+            if(max_d < d) {
+                max_d = d;
+                max_i = i;
+            }
         }
+        var d2 = data[end][3] - data[begin][3];
+        var max_dd = max_d * max_d + eps * eps;
+        if(max_i!=-1 && max_dd <= d2*d2) {
+            data[max_i][4] = true;
+            omitPolylineSub(data, begin, max_i, eps);
+            omitPolylineSub(data, max_i, end, eps);
+        }
+    };
+    var omitPolyline = function(data) {
+        var data2 = [];
+        data2.length = data.length;
+        for(var i=0; i<data.length; ++i) {
+            data2[i] = [];
+            data2[i].length = 5;
+            data2[i][0] = data[i][0];
+            data2[i][1] = data[i][1];
+            data2[i][2] = parseFloat(i) / (data2.length-1);
+            if(i==0) {
+                data2[i][3] = 0;
+            }
+            else {
+                var dx = data[i][0] - data[i-1][0];
+                var dy = data[i][1] - data[i-1][1];
+                data2[i][3] = data2[i-1][3] + Math.sqrt(dx*dx+dy*dy);
+            }
+            data2[i][4] = false;
+        }
+        data2[0][4] = true;
+        data2[data.length-1][4] = true;
+        omitPolylineSub(data2, 0, data2.length-1, Math.min(zoom.maxX-zoom.minX, zoom.maxY-zoom.minY) * 0.0001 * 0.01);
+        var data3 = [];
+        for(var i=0; i<data2.length; ++i) {
+            if(data2[i][4]) {
+                data3.push(data[i]);
+            }
+        }
+        return data3;
+    }
+    var drawing_sessions = {};
+    var upTouch = function(id, x, y) {
+        return;
+        var session = drawing_sessions[id];
+        if(session!==undefined) {
+            delete drawing_sessions[id];
+            var ele = session.ele;
+            if(ele!=null) {
+                ele.remove();
+                ele = null;
+            }
+            var data = session.data;
+            if(2<=data.length) {
+                data = omitPolyline(data);
+                ele = createSvgElement("polyline");
+                ele.setAttribute("fill", "none");
+                ele.setAttribute("stroke", "red");
+                ele.setAttribute("stroke-linecap", "round");
+                ele.setAttribute("stroke-linejoin", "round");
+                ele.setAttribute("stroke-width", Math.min(zoom.maxX-zoom.minX, zoom.maxY-zoom.minY) * 0.005);
+                var points = [];
+                for(var i=0; i<data.length; ++i) {
+                    points.push(data[i][0] + "," + data[i][1]);
+                }
+                ele.setAttribute("points", points.join(" "));
+                drawed.appendChild(ele);
+            }
+        }
+    };
+    var downTouch = function(id, x, y) {
+        return;
+        if(drawing_sessions[id]!==undefined) {
+            upTouch(id, null, null);
+        }
+        drawing_sessions[id] = {data: [[x, y]], ele: null};
+    };
+    var moveTouch = function(id, x, y) {
+        return;
+        var session = drawing_sessions[id];
+        if(session!==undefined) {
+            var data = session.data;
+            console.assert(data!=null);
+            data.push([x, y]);
+            console.assert(2<=data.length);
+            var ele = session.ele;
+            if(ele==null) {
+                ele = session.ele = createSvgElement("polyline");
+                ele.setAttribute("fill", "none");
+                ele.setAttribute("stroke", "red");
+                ele.setAttribute("stroke-linecap", "round");
+                ele.setAttribute("stroke-linejoin", "round");
+                drawing.appendChild(ele);
+            }
+            ele.setAttribute("stroke-width", Math.min(zoom.maxX-zoom.minX, zoom.maxY-zoom.minY) * 0.005);
+            var points = [];
+            for(var i=0; i<data.length; ++i) {
+                points.push(data[i][0] + "," + data[i][1]);
+            }
+            ele.setAttribute("points", points.join(" "));
+        }
+    };
+    window.addEventListener("mousemove", function(e) {
         var w = zoom.maxX-zoom.minX;
         var h = zoom.maxY-zoom.minY;
         var scaleToClient = Math.min(svg.clientWidth / w, svg.clientHeight / h);
@@ -1065,6 +1207,10 @@ window.addEventListener("load", function() {
         var clientTop = (svg.clientHeight - h * scaleToClient) * 0.5;
         var x = (e.clientX - clientLeft) * scaleToSvg + zoom.minX;
         var y = (e.clientY - clientTop) * scaleToSvg + zoom.minY;
+        moveTouch("mouse", x, y);
+        if(!input_mode) {
+            return;
+        }
         if(link_over_id!=null && link_over_id<links.length && links[link_over_id][0](x, y)) {
         }
         else {
@@ -1089,10 +1235,21 @@ window.addEventListener("load", function() {
             }
         }
     });
-    window.addEventListener("mousedown", function(e) {
-        if(!input_mode) {
-            return;
+    window.addEventListener("touchmove", function(e) {
+        var w = zoom.maxX-zoom.minX;
+        var h = zoom.maxY-zoom.minY;
+        var scaleToClient = Math.min(svg.clientWidth / w, svg.clientHeight / h);
+        var scaleToSvg = Math.max(w / svg.clientWidth, h / svg.clientHeight);
+        var clientLeft = (svg.clientWidth - w * scaleToClient) * 0.5;
+        var clientTop = (svg.clientHeight - h * scaleToClient) * 0.5;
+        for(var i=0; i<e.changedTouches.length; ++i) {
+            var t = e.changedTouches[i];
+            var x = (t.clientX - clientLeft) * scaleToSvg + zoom.minX;
+            var y = (t.clientY - clientTop) * scaleToSvg + zoom.minY;
+            moveTouch(t.identifier, x, y);
         }
+    });
+    window.addEventListener("mousedown", function(e) {
         var w = zoom.maxX-zoom.minX;
         var h = zoom.maxY-zoom.minY;
         var scaleToClient = Math.min(svg.clientWidth / w, svg.clientHeight / h);
@@ -1101,6 +1258,10 @@ window.addEventListener("load", function() {
         var clientTop = (svg.clientHeight - h * scaleToClient) * 0.5;
         var x = (e.clientX - clientLeft) * scaleToSvg + zoom.minX;
         var y = (e.clientY - clientTop) * scaleToSvg + zoom.minY;
+        downTouch("mouse", x, y);
+        if(!input_mode) {
+            return;
+        }
         if(link_over_id!=null && link_over_ele!=null && link_over_id<links.length && links[link_over_id][0](x, y)) {
             input_mode = false;
             var ele = link_over_ele;
@@ -1120,6 +1281,48 @@ window.addEventListener("load", function() {
                     ele.setAttribute("fill-opacity", "0%");
                 }
             }, 500);
+        }
+    });
+    window.addEventListener("touchstart", function(e) {
+        var w = zoom.maxX-zoom.minX;
+        var h = zoom.maxY-zoom.minY;
+        var scaleToClient = Math.min(svg.clientWidth / w, svg.clientHeight / h);
+        var scaleToSvg = Math.max(w / svg.clientWidth, h / svg.clientHeight);
+        var clientLeft = (svg.clientWidth - w * scaleToClient) * 0.5;
+        var clientTop = (svg.clientHeight - h * scaleToClient) * 0.5;
+        for(var i=0; i<e.changedTouches.length; ++i) {
+            var t = e.changedTouches[i];
+            var x = (t.clientX - clientLeft) * scaleToSvg + zoom.minX;
+            var y = (t.clientY - clientTop) * scaleToSvg + zoom.minY;
+            downTouch(t.identifier, x, y);
+        }
+    });
+    window.addEventListener("mouseup", function(e) {
+        var w = zoom.maxX-zoom.minX;
+        var h = zoom.maxY-zoom.minY;
+        var scaleToClient = Math.min(svg.clientWidth / w, svg.clientHeight / h);
+        var scaleToSvg = Math.max(w / svg.clientWidth, h / svg.clientHeight);
+        var clientLeft = (svg.clientWidth - w * scaleToClient) * 0.5;
+        var clientTop = (svg.clientHeight - h * scaleToClient) * 0.5;
+        var x = (e.clientX - clientLeft) * scaleToSvg + zoom.minX;
+        var y = (e.clientY - clientTop) * scaleToSvg + zoom.minY;
+        upTouch("mouse", x, y);
+        if(!input_mode) {
+            return;
+        }
+    });
+    window.addEventListener("touchend", function(e) {
+        var w = zoom.maxX-zoom.minX;
+        var h = zoom.maxY-zoom.minY;
+        var scaleToClient = Math.min(svg.clientWidth / w, svg.clientHeight / h);
+        var scaleToSvg = Math.max(w / svg.clientWidth, h / svg.clientHeight);
+        var clientLeft = (svg.clientWidth - w * scaleToClient) * 0.5;
+        var clientTop = (svg.clientHeight - h * scaleToClient) * 0.5;
+        for(var i=0; i<e.changedTouches.length; ++i) {
+            var t = e.changedTouches[i];
+            var x = (t.clientX - clientLeft) * scaleToSvg + zoom.minX;
+            var y = (t.clientY - clientTop) * scaleToSvg + zoom.minY;
+            upTouch(t.identifier, x, y);
         }
     });
     var getGvFile = function() {
@@ -1199,6 +1402,7 @@ window.addEventListener("load", function() {
     <body style="margin: 0;">
         <div class="screen" style="position: fixed; width: 100%; height: 100%; overflow: hidden;"></div>
         <div style="position: fixed; overflow: hidden; right: 0; bottom: 0;" align="right">
+            <div>Draw: <span class="draw_time"></span>ms</div>
             <div class="pages" style="display: none;"><span class="snap_name"></span> <span class="now_snap"></span> / <span class="total_snap"></span></div>
             <div>[<span class="copy">Copy</span>] [<span class="download">Download</span>] [Upload: <input type="file" accept=".gv" class="upload">]</div>
         </div>

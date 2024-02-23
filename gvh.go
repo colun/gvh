@@ -341,7 +341,7 @@ L:
 					if err != nil {
 						break L
 					}
-					fmt.Fprintln(os.Stdout, string(message))
+					fmt.Fprint(os.Stdout, string(message))
 				}
 			} else {
 				snaps = append(snaps, line)
